@@ -10,7 +10,6 @@
 
   type Props = {
     boardEl: HTMLElement;
-    draggingFrom: string;
     legalMoves: string[];
     piece: Piece;
     squareSize: number;
@@ -20,7 +19,6 @@
 
   let {
     boardEl,
-    draggingFrom,
     legalMoves,
     piece,
     squareSize,
@@ -31,11 +29,13 @@
   let rect = $state<DOMRect | null>(null);
 
   let pointer = $state<Vec>({ x: 0, y: 0 });
-  let ghost = $state<Vec | null>(null); // Initialize with fallback value
+  let ghost = $state<Vec | null>(null);
+
   let hasInitialised = $state(false);
 
   $effect(() => {
     if (!dragStartXY) return;
+
     ghost = { ...dragStartXY };
     pointer = { ...dragStartXY };
     hasInitialised = true;
@@ -97,31 +97,34 @@
 
   function onPointerMove(e: PointerEvent) {
     if (!rect || !hasInitialised) return;
+
     const p = clientToBoard(e);
     if (!p) return;
+
     pointer = p;
   }
 
   function tick() {
-    if (draggingFrom && piece && ghost) {
+    if (ghost) {
       const snap = nearestSnap();
 
       const target =
-        snap && snap.distance < squareSize * 0.75 ? snap.pos : pointer;
+        snap && snap.distance < squareSize * 0.55 ? snap.pos : pointer;
 
-      if (snap && snap.distance < squareSize * 0.75) {
+      if (snap && snap.distance < squareSize * 0.55) {
         snapTarget = snap.square;
       } else {
         snapTarget = null;
       }
 
-      ghost = { ...target };
+      ghost = {
+        x: ghost.x + (target.x - ghost.x) * 0.85,
+        y: ghost.y + (target.y - ghost.y) * 0.85,
+      };
     }
 
     raf = requestAnimationFrame(tick);
   }
-
-  // Refactor the effect logic
 
   $effect(() => {
     updateRect();
@@ -148,11 +151,11 @@
     class="ghost"
     src={sprite}
     style="
-    transform: translate(
-      calc({ghost.x}px - {squareSize / 2}px),
-      calc({ghost.y}px - {squareSize / 2}px)
-    );
-  "
+      transform: translate(
+        calc({ghost.x}px - {squareSize / 2}px),
+        calc({ghost.y}px - {squareSize / 2}px)
+      );
+    "
     alt=""
     draggable="false"
   />

@@ -4,12 +4,31 @@
   import { pieces } from "$lib/ui/pieces";
   import GhostPiece from "./GhostPiece.svelte";
 
-  let boardEl = $state<HTMLElement | null>(null);
+  type Vec = { x: number; y: number };
 
-  let selected = $state<string | null>(null);
-  let draggingFrom = $state<string | null>(null);
-  let legalMoves = $state<string[]>([]);
+  type Interaction =
+    | { type: "idle" }
+    | {
+        type: "armed";
+        square: string;
+        start: Vec;
+        legal: string[];
+        moved: boolean;
+      }
+    | { type: "selected"; square: string; legal: string[] }
+    | {
+        type: "dragging";
+        square: string;
+        start: Vec;
+        legal: string[];
+      };
+
+  let boardEl = $state<HTMLElement | null>(null);
+  let interaction: Interaction = $state({ type: "idle" });
+
   let snapTarget = $state<string | null>(null);
+
+  const DRAG_THRESHOLD = 6;
   const SQ = 50;
 
   function chess() {
@@ -22,69 +41,33 @@
       .map((m) => m.to);
   }
 
-  function onPointerDown(square: string) {
-    const c = chess();
-
-    const piece = c.get(square as any);
-    if (!piece || piece.color !== c.turn()) return;
-
-    draggingFrom = square;
-    selected = square;
-    legalMoves = computeLegalMoves(square);
-  }
-
-  function endDrag() {
-    draggingFrom = null;
-    selected = null;
-    legalMoves = [];
-  }
-
-  function onPointerUp(square: string) {
-    if (!draggingFrom) return;
-    let destination = snapTarget ?? square;
-
-    if (!legalMoves.includes(destination)) {
-      endDrag();
-      return;
-    }
-
+  function attemptMove(from: string, to: string) {
     const c = chess();
 
     const move = c.move({
-      from: draggingFrom,
-      to: destination,
+      from,
+      to,
       promotion: "q",
     });
 
-    if (!move) {
-      endDrag();
-      return;
-    }
+    if (!move) return false;
 
     game.dispatch({
       type: "MOVE",
-      from: draggingFrom,
-      to: destination,
+      from,
+      to,
       promotion: move.promotion,
       source: "user",
     });
 
-    endDrag();
+    return true;
   }
+  const legalAt = (sq: string) =>
+    interaction.type !== "idle" && interaction.legal.includes(sq);
+  const selectedAt = (sq: string) =>
+    interaction.type !== "idle" && interaction.square === sq;
 
-  const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
-  const ranks = ["8", "7", "6", "5", "4", "3", "2", "1"];
-
-  function pieceAt(square: string) {
-    if (square === draggingFrom) return null;
-    return chess().get(square as any);
-  }
-
-  function isDarkSquare(f: number, r: number) {
-    return (f + r) % 2 === 1;
-  }
-
-  function squareToXY(square: string) {
+  function squareToXY(square: string): Vec {
     const file = square.charCodeAt(0) - 97;
     const rank = 8 - parseInt(square[1]);
 
@@ -93,23 +76,131 @@
       y: rank * SQ + SQ / 2,
     };
   }
-  const dragStartXY = $derived(draggingFrom ? squareToXY(draggingFrom) : null);
+
+  function onPointerDown(square: string, e: PointerEvent) {
+    const c = chess();
+    const piece = c.get(square as any);
+
+    if (interaction.type === "idle") {
+      if (!piece || piece.color !== c.turn()) return;
+      interaction = {
+        type: "armed",
+        square,
+        start: { x: e.clientX, y: e.clientY },
+        legal: computeLegalMoves(square),
+        moved: false,
+      };
+      return;
+    }
+
+    if (interaction.type === "selected") {
+      // click valid target
+      if (interaction.legal.includes(square)) {
+        attemptMove(interaction.square, square);
+      }
+      // clicked on a non-legal square or another player's piece
+      if (!piece || piece.color !== c.turn()) {
+        end();
+        return;
+      }
+      // if we clicked on another of our pieces then stay as "selected"
+      // but change the selection
+      interaction = {
+        type: "armed",
+        square,
+        start: { x: e.clientX, y: e.clientY },
+        legal: computeLegalMoves(square),
+        moved: false,
+      };
+      return;
+    }
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (interaction.type !== "armed") return;
+
+    const dx = e.clientX - interaction.start.x;
+    const dy = e.clientY - interaction.start.y;
+
+    if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      interaction = {
+        type: "dragging",
+        square: interaction.square,
+        start: interaction.start,
+        legal: interaction.legal,
+      };
+    }
+  }
+
+  function end() {
+    interaction = { type: "idle" };
+    snapTarget = null;
+  }
+
+  function onPointerUp(square: string) {
+    if (interaction.type === "idle") return;
+
+    // ---------------- DRAG ----------------
+    if (interaction.type === "dragging") {
+      const dest = snapTarget ?? square;
+
+      if (interaction.legal.includes(dest)) {
+        attemptMove(interaction.square, dest);
+      }
+
+      end();
+      return;
+    }
+
+    // ---------------- CLICK (armed only) ----------------
+    if (interaction.type === "armed") {
+      // click same square = deselect
+      if (interaction.square === square) {
+        interaction = { type: "selected", square, legal: interaction.legal };
+        return;
+      }
+
+      // click valid target
+      if (interaction.legal.includes(square)) {
+        attemptMove(interaction.square, square);
+      }
+
+      end();
+    }
+  }
+
+  function pieceAt(square: string) {
+    if (interaction.type === "dragging" && interaction.square === square) {
+      return null;
+    }
+
+    return chess().get(square as any);
+  }
+
+  function getDragStartXY(i: Interaction) {
+    if (i.type === "idle") return null;
+    return squareToXY(i.square);
+  }
+
+  const dragStartXY = $derived(getDragStartXY(interaction));
 </script>
 
+<svelte:window on:pointermove={onPointerMove} />
+
 <div class="board" bind:this={boardEl}>
-  {#each ranks as r, ri}
+  {#each ["8", "7", "6", "5", "4", "3", "2", "1"] as r, ri}
     <div class="rank">
-      {#each files as f, fi}
+      {#each ["a", "b", "c", "d", "e", "f", "g", "h"] as f, fi}
         {@const sq = `${f}${r}`}
         {@const piece = pieceAt(sq)}
 
         <div
           role="none"
           class="square"
-          class:dark={isDarkSquare(fi, ri)}
-          class:selected={selected === sq}
-          class:legal={legalMoves.includes(sq)}
-          onpointerdown={() => onPointerDown(sq)}
+          class:dark={(fi + ri) % 2 === 1}
+          class:legal={legalAt(sq)}
+          class:selected={selectedAt(sq)}
+          onpointerdown={(e) => onPointerDown(sq, e)}
           onpointerup={() => onPointerUp(sq)}
         >
           {#if piece}
@@ -121,14 +212,13 @@
     </div>
   {/each}
 
-  {#if draggingFrom && boardEl && dragStartXY}
-    {@const piece = chess().get(draggingFrom as any)}
+  {#if interaction.type === "dragging" && boardEl && dragStartXY}
+    {@const piece = chess().get(interaction.square as any)}
 
     {#if piece}
       <GhostPiece
         {boardEl}
-        {draggingFrom}
-        {legalMoves}
+        legalMoves={interaction.legal}
         {piece}
         {dragStartXY}
         squareSize={SQ}
@@ -143,33 +233,27 @@
     display: inline-block;
     position: relative;
     border: 1px solid #333;
-
-    /* important: prevents flex/grid parents from stretching it */
     flex: 0 0 auto;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .rank {
     display: flex;
-    flex: 0 0 auto;
   }
 
   .square {
     width: 50px;
     height: 50px;
     flex: 0 0 50px;
-
     display: flex;
     align-items: center;
     justify-content: center;
-
-    user-select: none;
-    box-sizing: border-box;
   }
 
   .square.dark {
     background: #769656;
   }
-
   .square:not(.dark) {
     background: #eeeed2;
   }
@@ -183,7 +267,6 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-
     background: rgba(0, 0, 0, 0.35);
     position: absolute;
   }
