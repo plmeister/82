@@ -15,6 +15,7 @@
     piece: Piece;
     squareSize: number;
     dragStartXY: Vec;
+    snapTarget?: string | null;
   };
 
   let {
@@ -24,12 +25,21 @@
     piece,
     squareSize,
     dragStartXY,
+    snapTarget = $bindable<string | null>(null),
   }: Props = $props();
 
   let rect = $state<DOMRect | null>(null);
 
   let pointer = $state<Vec>({ x: 0, y: 0 });
-  let ghost = $state<Vec>(dragStartXY); // 🔥 FIX: correct initial position
+  let ghost = $state<Vec | null>(null); // Initialize with fallback value
+  let hasInitialised = $state(false);
+
+  $effect(() => {
+    if (!dragStartXY) return;
+    ghost = { ...dragStartXY };
+    pointer = { ...dragStartXY };
+    hasInitialised = true;
+  });
 
   let raf = 0;
 
@@ -79,23 +89,33 @@
     if (!best) return null;
 
     return {
+      square: best,
       pos: squareToXY(best),
       distance: bestD,
     };
   }
 
   function onPointerMove(e: PointerEvent) {
+    if (!rect || !hasInitialised) return;
     const p = clientToBoard(e);
     if (!p) return;
     pointer = p;
   }
 
   function tick() {
-    if (draggingFrom && piece) {
+    if (draggingFrom && piece && ghost) {
       const snap = nearestSnap();
 
       const target =
         snap && snap.distance < squareSize * 0.75 ? snap.pos : pointer;
+
+      if (snap && snap.distance < squareSize * 0.75) {
+        console.log("snapping to:", snap.square);
+        snapTarget = snap.square;
+      } else {
+        console.log("no snap");
+        snapTarget = null;
+      }
 
       ghost = {
         x: ghost.x + (target.x - ghost.x) * 0.35,
@@ -105,6 +125,8 @@
 
     raf = requestAnimationFrame(tick);
   }
+
+  // Refactor the effect logic
 
   $effect(() => {
     updateRect();
@@ -126,18 +148,20 @@
   const sprite = $derived(pieces[piece.color + piece.type]);
 </script>
 
-<img
-  class="ghost"
-  src={sprite}
-  style="
+{#if hasInitialised && ghost}
+  <img
+    class="ghost"
+    src={sprite}
+    style="
     transform: translate(
       calc({ghost.x}px - {squareSize / 2}px),
       calc({ghost.y}px - {squareSize / 2}px)
     );
   "
-  alt=""
-  draggable="false"
-/>
+    alt=""
+    draggable="false"
+  />
+{/if}
 
 <style>
   .ghost {

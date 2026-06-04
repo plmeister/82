@@ -9,7 +9,7 @@
   let selected = $state<string | null>(null);
   let draggingFrom = $state<string | null>(null);
   let legalMoves = $state<string[]>([]);
-
+  let snapTarget = $state<string | null>(null);
   const SQ = 50;
 
   function chess() {
@@ -31,6 +31,8 @@
     draggingFrom = square;
     selected = square;
     legalMoves = computeLegalMoves(square);
+
+    console.log(draggingFrom, dragStartXY);
   }
 
   function endDrag() {
@@ -41,8 +43,10 @@
 
   function onPointerUp(square: string) {
     if (!draggingFrom) return;
+    console.log("square:", square, "snap", snapTarget);
+    let destination = snapTarget ?? square;
 
-    if (!legalMoves.includes(square)) {
+    if (!legalMoves.includes(destination)) {
       endDrag();
       return;
     }
@@ -51,7 +55,7 @@
 
     const move = c.move({
       from: draggingFrom,
-      to: square,
+      to: destination,
       promotion: "q",
     });
 
@@ -63,7 +67,7 @@
     game.dispatch({
       type: "MOVE",
       from: draggingFrom,
-      to: square,
+      to: destination,
       promotion: move.promotion,
       source: "user",
     });
@@ -103,6 +107,7 @@
         {@const piece = pieceAt(sq)}
 
         <div
+          role="none"
           class="square"
           class:dark={isDarkSquare(fi, ri)}
           class:selected={selected === sq}
@@ -130,6 +135,7 @@
         {piece}
         {dragStartXY}
         squareSize={SQ}
+        bind:snapTarget
       />
     {/if}
   {/if}
