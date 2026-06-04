@@ -110,17 +110,12 @@
         snap && snap.distance < squareSize * 0.75 ? snap.pos : pointer;
 
       if (snap && snap.distance < squareSize * 0.75) {
-        console.log("snapping to:", snap.square);
         snapTarget = snap.square;
       } else {
-        console.log("no snap");
         snapTarget = null;
       }
 
-      ghost = {
-        x: ghost.x + (target.x - ghost.x) * 0.35,
-        y: ghost.y + (target.y - ghost.y) * 0.35,
-      };
+      ghost = { ...target };
     }
 
     raf = requestAnimationFrame(tick);

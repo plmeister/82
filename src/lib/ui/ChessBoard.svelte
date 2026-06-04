@@ -31,8 +31,6 @@
     draggingFrom = square;
     selected = square;
     legalMoves = computeLegalMoves(square);
-
-    console.log(draggingFrom, dragStartXY);
   }
 
   function endDrag() {
@@ -43,7 +41,6 @@
 
   function onPointerUp(square: string) {
     if (!draggingFrom) return;
-    console.log("square:", square, "snap", snapTarget);
     let destination = snapTarget ?? square;
 
     if (!legalMoves.includes(destination)) {
