@@ -1,7 +1,8 @@
-import { writable } from "svelte/store";
+import { writable, get } from "svelte/store";
 import type { GameState, GameEvent } from "$lib/core/types";
 import { reduce } from "$lib/core/reducer";
 import { Chess } from "chess.js";
+import { maybeTriggerEngineMove } from "$lib/game/orchestrator";
 
 const initial: GameState = {
   id: crypto.randomUUID(),
@@ -16,8 +17,24 @@ function createGameStore() {
   return {
     subscribe,
 
+    get() {
+      return get({ subscribe });
+    },
+
     dispatch(event: GameEvent) {
-      update((state) => reduce(state, event));
+      let latestFen = "";
+
+      update((state) => {
+        const next = reduce(state, event);
+        latestFen = next.fen;
+        return next;
+      });
+
+      if (event.type === "MOVE") {
+        queueMicrotask(() => {
+          maybeTriggerEngineMove(latestFen);
+        });
+      }
     },
 
     reset() {
