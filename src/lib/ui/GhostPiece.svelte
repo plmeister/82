@@ -151,10 +151,10 @@
     class="ghost"
     src={sprite}
     style="
-      transform: translate(
-        calc({ghost.x}px - {squareSize / 2}px),
-        calc({ghost.y}px - {squareSize / 2}px)
-      );
+      transform: translate({ghost.x - squareSize / 2}px, {ghost.y -
+      squareSize / 2}px);
+      width: {squareSize}px;
+      height: {squareSize}px;
     "
     alt=""
     draggable="false"
@@ -164,8 +164,6 @@
 <style>
   .ghost {
     position: absolute;
-    width: 50px;
-    height: 50px;
     pointer-events: none;
     z-index: 9999;
     opacity: 0.9;

@@ -23,13 +23,25 @@
         legal: string[];
       };
 
+  let boardSize = $state(400);
+  $effect(() => {
+    if (!boardEl) return;
+
+    const observer = new ResizeObserver(() => {
+      boardSize = boardEl?.clientWidth ?? 400;
+    });
+
+    observer.observe(boardEl);
+    return () => observer.disconnect();
+  });
+
   let boardEl = $state<HTMLElement | null>(null);
   let interaction: Interaction = $state({ type: "idle" });
 
   let snapTarget = $state<string | null>(null);
 
   const DRAG_THRESHOLD = 6;
-  const SQ = 50;
+  const squareSize = $derived(boardSize / 8);
 
   function chess() {
     return new Chess($game.fen);
@@ -72,14 +84,16 @@
     const rank = 8 - parseInt(square[1]);
 
     return {
-      x: file * SQ + SQ / 2,
-      y: rank * SQ + SQ / 2,
+      x: file * squareSize + squareSize / 2,
+      y: rank * squareSize + squareSize / 2,
     };
   }
 
   function onPointerDown(square: string, e: PointerEvent) {
     const c = chess();
     const piece = c.get(square as any);
+
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 
     if (interaction.type === "idle") {
       if (!piece || piece.color !== c.turn()) return;
@@ -90,6 +104,7 @@
         legal: computeLegalMoves(square),
         moved: false,
       };
+
       return;
     }
 
@@ -112,6 +127,7 @@
         legal: computeLegalMoves(square),
         moved: false,
       };
+
       return;
     }
   }
@@ -186,32 +202,28 @@
 </script>
 
 <svelte:window on:pointermove={onPointerMove} />
-
 <div class="board" bind:this={boardEl}>
-  {#each ["8", "7", "6", "5", "4", "3", "2", "1"] as r, ri}
-    <div class="rank">
-      {#each ["a", "b", "c", "d", "e", "f", "g", "h"] as f, fi}
-        {@const sq = `${f}${r}`}
-        {@const piece = pieceAt(sq)}
+  {#each ["8", "7", "6", "5", "4", "3", "2", "1"] as r}
+    {#each ["a", "b", "c", "d", "e", "f", "g", "h"] as f}
+      {@const sq = `${f}${r}`}
+      {@const piece = pieceAt(sq)}
 
-        <div
-          role="none"
-          class="square"
-          class:dark={(fi + ri) % 2 === 1}
-          class:legal={legalAt(sq)}
-          class:selected={selectedAt(sq)}
-          onpointerdown={(e) => onPointerDown(sq, e)}
-          onpointerup={() => onPointerUp(sq)}
-        >
-          {#if piece}
-            {@const key = piece.color + piece.type}
-            <img class="piece" src={pieces[key]} alt={key} />
-          {/if}
-        </div>
-      {/each}
-    </div>
+      <div
+        role="none"
+        class="square"
+        class:dark={(f.charCodeAt(0) + +r) % 2 === 1}
+        class:selected={selectedAt(sq)}
+        class:legal={legalAt(sq)}
+        onpointerdown={(e) => onPointerDown(sq, e)}
+        onpointerup={() => onPointerUp(sq)}
+      >
+        {#if piece}
+          {@const key = piece.color + piece.type}
+          <img class="piece" src={pieces[key]} alt={key} />
+        {/if}
+      </div>
+    {/each}
   {/each}
-
   {#if interaction.type === "dragging" && boardEl && dragStartXY}
     {@const piece = chess().get(interaction.square as any)}
 
@@ -221,7 +233,7 @@
         legalMoves={interaction.legal}
         {piece}
         {dragStartXY}
-        squareSize={SQ}
+        {squareSize}
         bind:snapTarget
       />
     {/if}
@@ -230,25 +242,23 @@
 
 <style>
   .board {
-    display: inline-block;
+    width: min(100vw, 800px);
+    aspect-ratio: 1;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
     position: relative;
     border: 1px solid #333;
-    flex: 0 0 auto;
     user-select: none;
     -webkit-user-select: none;
-  }
-
-  .rank {
-    display: flex;
+    touch-action: none;
   }
 
   .square {
-    width: 50px;
-    height: 50px;
-    flex: 0 0 50px;
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
   }
 
   .square.dark {
@@ -264,8 +274,8 @@
 
   .square.legal::after {
     content: "";
-    width: 12px;
-    height: 12px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.35);
     position: absolute;
